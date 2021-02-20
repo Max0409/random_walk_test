@@ -38,6 +38,7 @@ public:
     void NumVerticesAddOne();
     void ConstructCSR();
     void LoadData(char*  train_file,HashTable* hash_table);
+    void InitNeighborIds();
     void BuildNeighborAliasTable();
     void InitializeProbs(int count,int *alias,float *prob,float *weights);
     int SampleAVertice(int* alias,float *prob,double rand_value1, double rand_value2,int offset_u,int offset_u_plus1);
@@ -153,7 +154,7 @@ void OriginalGraph::LoadData(char*  train_file,HashTable* hash_table)
     printf("Number of edges: %lld          \n", this->num_edges);
     this->edge_source_id = (int *)malloc(this->num_edges*sizeof(int));
     this->edge_target_id = (int *)malloc(this->num_edges*sizeof(int));
-    this->weight = (idx_t*)malloc(this->num_edges*sizeof(idx_t));
+    this->weight = (int *)malloc(this->num_edges*sizeof(int));
     fin = fopen(train_file, "rb");
     this->num_vertices = 0;
     double weight;
@@ -171,19 +172,19 @@ void OriginalGraph::LoadData(char*  train_file,HashTable* hash_table)
         vid = hash_table->SearchHashTable(name_v2);
         if (vid == -1) vid = hash_table->AddVertex(name_v2,this);
         this->edge_target_id[k] = vid;
-        this->weight[k] = (idx_t)weight;
+        this->weight[k] = (int)weight;
     }
     fclose(fin);
     printf("Number of vertices: %d          \n", this->num_vertices);
-    this->vertex_partition_local_id_subgraph1=(int *)malloc(this->num_vertices*sizeof(int));
-    this->vertex_partition_local_id=(int *)malloc(this->num_vertices*sizeof(int));
-    this->first_subgraph_id=(idx_t *)malloc((this->num_vertices) * sizeof(idx_t));
-    this->second_subgraph_id=(int *)malloc(this->num_vertices*sizeof(int));
-    for(int i=0;i<this->num_vertices;i++)
-    {   this->vertex_partition_local_id[i]=-1;
-        this->first_subgraph_id[i]=-1;
-        this->second_subgraph_id[i]=-1;
-    }
+  //  this->vertex_partition_local_id_subgraph1=(int *)malloc(this->num_vertices*sizeof(int));
+  //  this->vertex_partition_local_id=(int *)malloc(this->num_vertices*sizeof(int));
+  //  this->first_subgraph_id=(idx_t *)malloc((this->num_vertices) * sizeof(idx_t));
+ //   this->second_subgraph_id=(int *)malloc(this->num_vertices*sizeof(int));
+   // for(int i=0;i<this->num_vertices;i++)
+   // {   this->vertex_partition_local_id[i]=-1;
+     //   this->first_subgraph_id[i]=-1;
+       // this->second_subgraph_id[i]=-1;
+   // }
 
     printf("\n");
 }
@@ -211,7 +212,7 @@ void OriginalGraph::InitNeighborIds()
     for (long long k = 0; k != num_edges; k++)
     {
            
-           int h = source_id[k] + 1;
+           int h = edge_source_id[k] + 1;
            flat_offsets[h]++;
     }
     for(int i = 1; i < num_vertices + 1; i++)
@@ -223,17 +224,17 @@ void OriginalGraph::InitNeighborIds()
     for (long long k = 0; k != num_edges; k++)
     {
         
-        int index = flat_offsets[source_id[k]];
+        int index = flat_offsets[edge_source_id[k]];
         while(neighbor_ids[index] != -1)
         {
             index++;
         }
-        neighbor_ids[index] = target_id[k];
+        neighbor_ids[index] = edge_target_id[k];
         neighbor_weights[index] = weight[k];
 
-        vertex_degrees[source_id[k]] += weight;
-        vertex_degrees[target_id[k]] += weight;
-        vertex_sum_degrees += weight * 2;
+        //vertex_degrees[source_id[k]] += weight;
+        //vertex_degrees[target_id[k]] += weight;
+        vertex_sum_degrees += weight[k] * 2;
     }
     printf("InitNeighborIds with %d vertices and %lld edges from OriginalGraph",
             num_vertices, num_edges);
@@ -315,6 +316,7 @@ void OriginalGraph::RandomWalkWithCPU(int random_walk_length)
  
     for(int i=0;i<num_vertices;i++)
     {
+        //printf("%d\n",i);
         u=i;
         int sample_length=0;
         int index;
@@ -330,7 +332,7 @@ void OriginalGraph::RandomWalkWithCPU(int random_walk_length)
                 if(flat_offsets[u + 1] - flat_offsets[u])
                 {
                     u = v;
-                    index = flat_offsets[u] + SampleAVertice(gsl_rng_uniform(gsl_r), gsl_rng_uniform(gsl_r));
+                    index = flat_offsets[u] + SampleAVertice(alias,prob,gsl_rng_uniform(gsl_r), gsl_rng_uniform(gsl_r),flat_offsets[u],flat_offsets[u+1]);
                     v = neighbor_ids[index];
                     head_chains[i] = u;
                     tail_chains[i] = v;
@@ -344,7 +346,18 @@ void OriginalGraph::RandomWalkWithCPU(int random_walk_length)
 }
 
 
-
+int ArgPos(char *str, int argc, char **argv)
+{
+    int a;
+    for (a = 1; a < argc; a++) if (!strcmp(str, argv[a])) {
+        if (a == argc - 1) {
+            printf("Argument missing for %s\n", str);
+            exit(1);
+        }
+        return a;
+    }
+    return -1;
+}
 
 
 int main(int argc, char **argv) {
@@ -364,8 +377,10 @@ int main(int argc, char **argv) {
     OriginalGraph original_graph;
     hash_table.InitHashTable(hash_table_size);
     original_graph.LoadData(train_file,&hash_table);
-    original_graph.InitAliasTable();
+    original_graph.InitNeighborIds();
     original_graph.BuildNeighborAliasTable();
+    printf("BuildNeighborAliasTable\n");
     original_graph.RandomWalkWithCPU(random_walk_length);
+    printf("RandomWalkWithCPU\n");
     return 0;
 }
